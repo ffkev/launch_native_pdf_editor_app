@@ -1,12 +1,10 @@
-import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:pdflink/models/pdf_item.dart';
 import 'package:pdflink/services/storage_service.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:open_filex/open_filex.dart';
 
 class PdfService {
   final StorageService _storageService = StorageService();
@@ -29,7 +27,7 @@ class PdfService {
           final sourceFile = File(file.path!);
           final appDir = await getApplicationDocumentsDirectory();
           final pdfDir = Directory('${appDir.path}/pdfs');
-          
+
           if (!await pdfDir.exists()) {
             await pdfDir.create(recursive: true);
           }
@@ -62,7 +60,7 @@ class PdfService {
       if (response.statusCode == 200) {
         final appDir = await getApplicationDocumentsDirectory();
         final pdfDir = Directory('${appDir.path}/pdfs');
-        
+
         if (!await pdfDir.exists()) {
           await pdfDir.create(recursive: true);
         }
@@ -96,14 +94,14 @@ class PdfService {
         throw Exception('PDF file not found');
       }
 
-      final uri = Uri.file(file.path);
-      if (await canLaunchUrl(uri)) {
-        return await launchUrl(
-          uri,
-          mode: LaunchMode.externalApplication,
-        );
+      final result = await OpenFilex.open(filePath);
+
+      if (result.type == ResultType.done) {
+        return true;
+      } else if (result.type == ResultType.noAppToOpen) {
+        throw Exception('No app found to open PDF. Error: ${result.message}');
       } else {
-        throw Exception('No PDF viewer app found');
+        throw Exception('Failed to open PDF. Error: ${result.message}');
       }
     } catch (e) {
       throw Exception('Failed to open PDF: $e');
@@ -113,28 +111,28 @@ class PdfService {
   Future<void> deletePdfItem(String id) async {
     final items = await getPdfItems();
     final item = items.firstWhere((item) => item.id == id);
-    
+
     final file = File(item.path);
     if (await file.exists()) {
       await file.delete();
     }
-    
+
     await _storageService.deletePdfItem(id);
   }
 
   Future<void> renamePdfItem(String id, String newName) async {
     final items = await getPdfItems();
     final item = items.firstWhere((item) => item.id == id);
-    
+
     if (!newName.toLowerCase().endsWith('.pdf')) {
       newName = '$newName.pdf';
     }
-    
+
     final oldFile = File(item.path);
     final directory = oldFile.parent;
     final newPath = '${directory.path}/$newName';
     final newFile = await oldFile.rename(newPath);
-    
+
     final updatedItem = PdfItem(
       id: item.id,
       name: newName,
@@ -143,7 +141,7 @@ class PdfService {
       dateAdded: item.dateAdded,
       thumbnailPath: item.thumbnailPath,
     );
-    
+
     await _storageService.updatePdfItem(updatedItem);
   }
 }
